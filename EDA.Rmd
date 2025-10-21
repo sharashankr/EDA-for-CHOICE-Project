@@ -1,0 +1,283 @@
+---
+title: "CIMBTR"
+author: "Sharath Chandra Shankar"
+date: "2025-10-19"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+# Importing all the libraries
+```{r}
+library(survminer)
+library(survival)
+library(dplyr)
+library(haven)
+library(survival)
+library(survminer)
+library(Publish)
+library(gt)
+library(gtsummary)
+library(tidyverse)
+```
+
+# Reading the Dataset
+```{r}
+cohort <- read_sas("Downloads/P-5490/ct1901_public_data.sas7bdat")
+
+# Adding a unique identifier for each patient
+cohort <- cohort |> mutate(patientid = row_number())
+```
+
+# Look for column names
+```{r}
+colnames(cohort)
+```
+
+# Categorical variable encoding for cohort dataset
+```{r}
+cohort$strata <- factor(cohort$strata,
+                        levels = c(1, 2),
+                        labels = c("CAR-T", "Allo-HCT"))
+
+cohort$SEX <- factor(cohort$SEX,
+                        levels = c(1, 2),
+                        labels = c("Male", "Female"))
+
+cohort$donorgp <- factor(cohort$donorgp,
+                         levels = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 99),
+                         labels = c("HLA-identical sibling", "Twin", "Other related",
+                                    "Well-matched unrelated (8/8)", "Partially-matched unrelated (7/8)",
+                                    "Mis-matched unrelated (<=6/8)", "Multi-donor",
+                                    "Unrelated (matching TBD)", "Cord blood", 
+                                    "Haploidentical related", "Missing"))
+
+cohort$sum_scoregp <- factor(cohort$sum_scoregp,
+                             levels = c(0, 1, 2),
+                             labels = c("Low (Score 0)", 
+                                        "Intermediate (Score 2,4,5)", 
+                                        "High/Very High (Score 6,7,9,11)"))
+
+cohort$cthct_pfs <- factor(cohort$cthct_pfs,
+                           levels = c(0, 1),
+                           labels = c("Censoring - Alive and event free",
+                                      "Event - Relapse/progression/death"))
+
+cohort$cthct_dead <- factor(cohort$cthct_dead,
+                            levels = c(0, 1),
+                            labels = c("Alive at last contact", "Dead"))
+
+cohort$cthct_rel <- factor(cohort$cthct_rel,
+                           levels = c(0, 1, 2),
+                           labels = c("Censoring - Alive/disease free",
+                                      "Event - Relapse/progression/treatment failure/death (primary disease)",
+                                      "Competing risk - Death due to other causes"))
+
+cohort$nrm_cshct <- factor(cohort$nrm_cshct,
+                           levels = c(0, 1, 2),
+                           labels = c("Censoring - Alive/disease free",
+                                      "Event - Death due to other causes",
+                                      "Competing risk - Relapse/progression/treatment failure/death (primary disease)"))
+
+cohort$trm <- factor(cohort$trm,
+                     levels = c(0, 1, 2),
+                     labels = c("Censoring", 
+                                "Event - No relapse but dead", 
+                                "Competing risk - Relapse"))
+
+cohort$ct_crsgrade_100d35 <- factor(cohort$ct_crsgrade_100d35,
+                                    levels = c(0, 1),
+                                    labels = c("No", "Yes"))
+
+cohort$CT_CRSPS_100D <- factor(cohort$CT_CRSPS_100D,
+                               levels = c(0, 1),
+                               labels = c("No", "Yes"))
+
+cohort$ct_neutoxgrade_100d34 <- factor(cohort$ct_neutoxgrade_100d34,
+                                       levels = c(0, 1),
+                                       labels = c("No", "Yes"))
+
+cohort$CT_NEUTOXPS_100D <- factor(cohort$CT_NEUTOXPS_100D,
+                                  levels = c(0, 1),
+                                  labels = c("No", "Yes"))
+
+cohort$cthct_engraf <- factor(cohort$cthct_engraf,
+                              levels = c(0, 1, 2),
+                              labels = c("Censoring", 
+                                         "Event - Recovery achieved/never dropped", 
+                                         "Death without recovery"))
+
+cohort$cthct_pla20 <- factor(cohort$cthct_pla20,
+                             levels = c(0, 1, 2),
+                             labels = c("Censoring", 
+                                        "Event - Recovery achieved/never dropped", 
+                                        "Death without recovery"))
+
+cohort$agvhd24stat_rpt <- factor(cohort$agvhd24stat_rpt,
+                                 levels = c(0, 1, 2),
+                                 labels = c("Censoring", "Event", "Competing risk"))
+
+cohort$agvhd34stat_rpt <- factor(cohort$agvhd34stat_rpt,
+                                 levels = c(0, 1, 2),
+                                 labels = c("Censoring", "Event", "Competing risk"))
+
+cohort$cgvhdstat <- factor(cohort$cgvhdstat,
+                           levels = c(0, 1, 2),
+                           labels = c("Censoring", "Event", "Competing risk"))
+
+cohort$ct_treatbg <- factor(cohort$ct_treatbg,
+                            levels = c(0, 1),
+                            labels = c("No", "Yes"))
+```
+
+
+# Rename columns to more descriptive, human-readable names
+```{r}
+cohort <- cohort %>%
+  rename(
+    patient_id = dcrid,
+    center_id = dccn,
+    treatment_type = strata,
+    age_at_infusion = AGE,
+    age_group_ct = ct_agegp,
+    age_group_hct = hct_agegp,
+    gender = SEX,
+    performance_score = cthct_karnof,
+    hct_comorbidity_index = cthct_hctcigp,
+    time_diag_to_tx_months = cthct_intdx,
+    time_diag_to_tx_group = cthct_intdxgp,
+    time_prior_hct_to_ct_months = inthctct,
+    time_prior_hct_to_ct_group = inthctctgp,
+    time_prior_auto_to_allo_months = intautoallo,
+    time_prior_auto_to_allo_group = intautoallogp,
+    disease_status_at_tx = cthct_dstprm,
+    nodal_mass_size_cm = ct_nodmass,
+    conditioning_regimen = ct_cy_flud,
+    graft_source = graftypecat,
+    donor_type = donorgp,
+    year_of_tx = cthct_year,
+    cibmtr_prognostic_score = sum_score,
+    cibmtr_score_group = sum_scoregp,
+    time_to_chronic_gvhd_months = intxcgvhd,
+    pfs_status = cthct_pfs,
+    time_to_pfs_days = cthct_intpfs,
+    overall_survival_status = cthct_dead,
+    time_to_death_or_last_fu_days = cthct_intsurv,
+    relapse_status = cthct_rel,
+    nonrelapse_mortality_status = nrm_cshct,
+    trm_censored = trm_cshct,
+    trm_uncensored = trm,
+    crs_grade_100d = ct_crsgrade_100d35,
+    crs_presence_100d = CT_CRSPS_100D,
+    neurotox_grade_100d = ct_neutoxgrade_100d34,
+    neurotox_presence_100d = CT_NEUTOXPS_100D,
+    neutrophil_recovery_status = cthct_engraf,
+    time_to_neutrophil_recovery_days = cthct_intengraf,
+    platelet_recovery_status = cthct_pla20,
+    time_to_platelet_recovery_days = cthct_intpla20,
+    acute_gvhd_24_status = agvhd24stat_rpt,
+    time_to_acute_gvhd_24_months = intxagvhd24_rpt,
+    acute_gvhd_34_status = agvhd34stat_rpt,
+    time_to_acute_gvhd_34_months = intxagvhd34_rpt,
+    chronic_gvhd_status = cgvhdstat,
+    bridging_therapy = ct_treatbg
+  )
+
+```
+
+```{r}
+categorical_vars <- cohort %>%
+  select(where(~is.factor(.) || is.character(.))) %>%
+  names()
+
+# Generate Table 1 for all categorical variables, stratified by treatment
+table1 <- cohort %>%
+  tbl_summary(
+    by = treatment_type,                      # stratify by treatment group
+    include = all_of(categorical_vars),
+    missing = "ifany"                 # include missing counts if any
+  ) %>%
+  add_p() %>%                         # add p-values for group comparison
+  modify_header(label ~ "**Variable**") %>%
+  modify_spanning_header(all_stat_cols() ~ "**Treatment Group**") %>%
+  bold_labels() %>%
+  as_gt() %>%
+  gt::tab_header(title = "Table 1. Categorical Variable Distribution by Treatment Group")
+
+# Print Table
+table1
+```
+
+## Progression Free Survival (CAR-T vs Allo-HCT)
+```{r}
+# Read data
+survival_data <- read_sas("Downloads/P-5490/ct1901_public_data.sas7bdat")
+
+# Convert 'main' to factor
+survival_data$strata <- factor(survival_data$strata,
+                         levels = c(1, 2),
+                         labels = c("CAR-T", "Allo-HCT"))
+
+# Create survival object
+surv_obj <- Surv(time = survival_data$cthct_intpfs, event = survival_data$cthct_pfs)
+
+# Fit KM curve stratified by 'main'
+fit <- survfit(surv_obj ~ strata, data = survival_data)
+
+# Plot KM curve with cleaner look
+ggsurvplot(
+  fit,
+  data = survival_data,
+  conf.int = TRUE,                   # Show 95% CI
+  risk.table = TRUE,                 # Add risk table below
+  risk.table.height = .30,          # Reduce height of risk table
+  risk.table.fontsize = 3,           # Smaller font for risk table
+  risk.table.y.text.col = TRUE,     # Do not color the y-axis text
+  risk.table.y.text = TRUE,         # Remove y-axis text for risk table
+  xlab = "Time since transplant (Days)",
+  ylab = "Progression Free Survival Probability",
+  title = "Kaplan–Meier Curve Stratified by Treatment Type",
+  surv.median.line = "hv",           # Add horizontal & vertical median lines
+  mark.time = FALSE,                  # Remove tick marks for censored events
+  palette = c("steelblue", "firebrick")  # Optional: colors for strata
+)
+
+
+```
+## Overall Survival (CAR-T vs Allo-HCT)
+```{r}
+# Read data
+survival_data <- read_sas("Downloads/P-5490/ct1901_public_data.sas7bdat")
+
+# Convert 'main' to factor
+survival_data$strata <- factor(survival_data$strata,
+                         levels = c(1, 2),
+                         labels = c("CAR-T", "Allo-HCT"))
+
+# Create survival object
+surv_obj <- Surv(time = survival_data$cthct_intsurv, event = survival_data$cthct_dead)
+
+# Fit KM curve stratified by 'main'
+fit <- survfit(surv_obj ~ strata, data = survival_data)
+
+# Plot KM curve with cleaner look
+ggsurvplot(
+  fit,
+  data = survival_data,
+  conf.int = TRUE,                   # Show 95% CI
+  risk.table = TRUE,                 # Add risk table below
+  risk.table.height = .30,          # Reduce height of risk table
+  risk.table.fontsize = 3,           # Smaller font for risk table
+  risk.table.y.text.col = TRUE,     # Do not color the y-axis text
+  risk.table.y.text = TRUE,         # Remove y-axis text for risk table
+  xlab = "Time since transplant (Days)",
+  ylab = "Overall Survival Probability",
+  title = "Kaplan–Meier Curve Stratified by Treatment Type",
+  surv.median.line = "hv",           # Add horizontal & vertical median lines
+  mark.time = FALSE,                  # Remove tick marks for censored events
+  palette = c("steelblue", "firebrick")  # Optional: colors for strata
+)
+
+
+```
